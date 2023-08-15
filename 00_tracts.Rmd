@@ -1,0 +1,525 @@
+---
+title: "Population Data"
+author: "Liz"
+date: "2022-12-05"
+output: html_document
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+library(tidyverse) 
+library(tidycensus)
+library(sf)
+library(tigris) 
+options(tigris_use_cache = TRUE)
+options(scipen = 999)
+
+dir_1 <-"/Users/eliza/Documents/Data/Capstone"
+dir_2 <- "/Users/eliza/Documents/Data/Capstone/ACS Data"
+```
+
+**ACS Data: Median HH Income - used as census tract proxy**
+```{r}
+# # Get the data 
+# census_tracts <- get_acs(geography = "tract",
+#                          state = "NY",
+#                          county = c("New York", "Richmond",
+#                                     "Kings", "Queens", "Bronx"),
+#                         year = 2012,
+#                         survey = "acs5",
+#                         variables = c(median_hh_income = "B19013_001"),
+#                         geometry = TRUE) %>% 
+#                 select(-moe) 
+
+
+# # sf::st_write(census_tracts, str_glue("{dir_2}/census_tracts.shp")) 
+# census_tracts %>% head(5) 
+
+census_tracts <- st_read(paste0(dir_2, "/census_tracts_all/median_hh_income.shp")) %>% 
+  st_transform(4326) 
+```
+
+**Subway Stations (NYC Open Data) includes Treatment and Control Stations**
+These stations will be mapped in Arcgis with above data on HH median income. (Arcgis Method)
+```{r}
+# Read in Subway Stations info from NYC Open Data 
+stations <- st_read(paste0(dir_1, "/Subway_Stations/Stations/"), 
+                      layer = "geo_export_6c8e1b91-ae30-4310-8364-86bc2ac4e360") %>%  
+  st_transform(4326) 
+
+
+# Treatment Stations gathered from google sheets, MTA dashboard 
+names_treat <- c("South Ferry",
+           "Rockaway Park - Beach 116 St",
+           "Astoria Blvd", 
+           "Coney Island - Stillwell Av", 
+           "1st Ave", 
+           "Whitehall St", 
+           "Rector St", 
+           "Bowling Green", 
+           "Broad St", 
+           "Canal St - Holland Tunnel", 
+           "Canal St", 
+           "Franklin St",
+           "145th St", 
+           "55th St", 
+           "21st St - Queensbridge", 
+           "Roosevelt Island - Main St", 
+           "Houston St", 
+           "138th St - Grand Concourse", 
+           "110th St", 
+           "103rd St")
+
+treatment_stations <- stations %>% 
+  filter(name %in% names_treat)
+
+# st_write(treatment_stations, str_glue("{dir_1}/Treatment_Stations.shp"))
+
+# Comparison Stations in Sandy Inundation Zones from arcgis
+names_control <- c("Beach 105th St", 
+               "Beach 90th St", 
+               "Canal St", 
+               "Broad Channel", 
+               "Ocean Pkwy", 
+               "Beach 44th St", 
+               "Beach 60th St", 
+               "Beach 98th St",
+               "Rockaway Park - Beach 116 St", 
+               "Beach 36th St", 
+               "W 8th St - NY Aquarium",
+               "Beach 67th St",
+               "E 105th St",
+               "Howard Beach - JFK Airport", 
+               "25th Ave",
+               "Brighton Beach",
+               "Neptune Ave",
+               "Ave X",
+               "Bay 50th St",
+               "Smith - 9th Sts",
+               "Canal St - Holland Tunnel",
+               "South Ferry",
+               "Whitehall St",
+               "Franklin St",
+              "Coney Island - Stillwell Av") 
+               
+control_stations <- stations %>% 
+  filter(name %in% names_control) %>% 
+  filter(!row_number() %in% c(1, 23, 24, 27)) 
+               
+               
+# st_write(control_stations, str_glue("{dir_1}/Control_Stations.shp"))  
+```
+
+**Read in treatment census tracts** 
+**Hold on control census tracts** 
+```{r}
+# census tracts may show up more than once because of overlapping buffers in treatment samples (same for control group)
+
+census_tract_denominator <- read_csv(str_glue("{dir_1}/Arcgis_Output/treatment_census_tracts_corrected/census_tracts_denominator.csv")) %>%
+  select(-c(1, 4:8)) %>% 
+  distinct(GEOID, .keep_all = TRUE)
+
+trt_census_tract_1 <- read_csv(str_glue("{dir_1}/Arcgis_Output/treatment_census_tracts_corrected/trt_census_tracts_1.csv")) %>% 
+  mutate(status = "Treatment") %>% 
+  distinct(GEOID, .keep_all = TRUE) %>% 
+  select(-c("OBJECTID", "SHAPE_Leng", "SHAPE_Area")) %>% 
+  rename(SUM_CT_Area_Clip = SUM_CT_Are)
+
+trt_census_tract_75 <- read_csv(str_glue("{dir_1}/Arcgis_Output/treatment_census_tracts_corrected/trt_census_tracts_75.csv")) %>% 
+  mutate(status = "Treatment") %>% 
+  distinct(GEOID, .keep_all = TRUE) %>% 
+  select(-c("OBJECTID", "SHAPE_Leng", "SHAPE_Area")) %>% 
+  rename(SUM_CT_Area_Clip = SUM_CT_Are)
+  
+
+trt_census_tract_50 <- read_csv(str_glue("{dir_1}/Arcgis_Output/treatment_census_tracts_corrected/trt_census_tracts_50.csv")) %>% 
+  mutate(status = "Treatment")%>% 
+  distinct(GEOID, .keep_all = TRUE) %>% 
+  select(-c("OBJECTID", "SHAPE_Leng", "SHAPE_Area")) %>% 
+  rename(SUM_CT_Area_Clip = SUM_CT_Are)
+
+trt_census_tract_25 <- read_csv(str_glue("{dir_1}/Arcgis_Output/treatment_census_tracts_corrected/trt_census_tracts_25.csv")) %>% 
+  mutate(status = "Treatment")%>% 
+  distinct(GEOID, .keep_all = TRUE) %>% 
+  select(-c("OBJECTID", "SHAPE_Leng", "SHAPE_Area")) %>% 
+  rename(SUM_CT_Area_Clip = SUM_CT_Are)
+  
+
+## Comment out Control Group Code for now 
+
+census_tract_denominator_ctrl <- read_csv(str_glue("{dir_1}/Arcgis_Output/control_census_tracts_corrected/census_tracts_denominator.csv")) %>%
+  select(-c(1, 4:8)) %>% 
+  distinct(GEOID, .keep_all = TRUE)
+
+ctrl_census_tract_1 <- read_csv(str_glue("{dir_1}/Arcgis_Output/control_census_tracts_corrected/ctrl_census_tracts_1.csv")) %>%
+  mutate(status = "Control")  %>% 
+  distinct(GEOID, .keep_all = TRUE) %>% 
+  select(-c("OBJECTID", "SHAPE_Length", "SHAPE_Area"))
+
+ctrl_census_tract_75 <- read_csv(str_glue("{dir_1}/Arcgis_Output/control_census_tracts_corrected/ctrl_census_tracts_75.csv")) %>%
+  mutate(status = "Control") %>% 
+  distinct(GEOID, .keep_all = TRUE) %>% 
+  select(-c("OBJECTID", "SHAPE_Leng", "SHAPE_Area")) %>% 
+  rename(SUM_CT_Area_Clip = SUM_CT_Are)
+  
+ctrl_census_tract_50 <- read_csv(str_glue("{dir_1}/Arcgis_Output/control_census_tracts_corrected/ctrl_census_tracts_50.csv")) %>%
+  mutate(status = "Control") %>% 
+  distinct(GEOID, .keep_all = TRUE) %>% 
+  select(-c("OBJECTID", "SHAPE_Leng", "SHAPE_Area")) %>% 
+  rename(SUM_CT_Area_Clip = SUM_CT_Are)
+
+ctrl_census_tract_25 <- read_csv(str_glue("{dir_1}/Arcgis_Output/control_census_tracts_corrected/ctrl_census_tracts_25.csv")) %>%
+  mutate(status = "Control") %>%
+  distinct(GEOID, .keep_all = TRUE) %>% 
+  select(-c("OBJECTID", "SHAPE_Leng", "SHAPE_Area")) %>% 
+  rename(SUM_CT_Area_Clip = SUM_CT_Are)
+
+```
+
+
+**Calculate Percentage of Census Tract that falls within the area** -- I use threshold criteria of 50%, 75%, and 100% as a sensitivity check 
+```{r}
+
+########################### 50% Threshold - TRT ##############################
+mile_percent_threshold_50 <- trt_census_tract_1 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = SUM_CT_Area_Clip/CT_Area *100 ) %>% 
+  filter(Percent_Area >= 50.0) 
+
+
+three_quarter_mile_percent_threshold_50 <- trt_census_tract_75 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = (SUM_CT_Area_Clip/CT_Area) *100 ) %>% 
+  filter(Percent_Area >= 50.0) 
+
+half_mile_percent_threshold_50 <- trt_census_tract_50 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = (SUM_CT_Area_Clip/CT_Area) *100 ) %>% 
+  filter(Percent_Area >= 50.0) 
+  
+
+quarter_mile_percent_threshold_50 <- trt_census_tract_25 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = (SUM_CT_Area_Clip/CT_Area) *100 ) %>% 
+  filter(Percent_Area >= 50.0) 
+  
+
+########################### 50 Threshold - CONTROL ########################## 
+mile_percent_ctrl_threshold_50 <- ctrl_census_tract_1 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = SUM_CT_Area_Clip/CT_Area *100 ) %>% 
+  filter(Percent_Area >= 50.0) 
+
+three_quarter_mile_percent_ctrl_threshold_50 <- ctrl_census_tract_75 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = (SUM_CT_Area_Clip/CT_Area) *100 ) %>% 
+  filter(Percent_Area >= 50.0) 
+
+
+half_mile_percent_ctrl_threshold_50 <- ctrl_census_tract_50 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = (SUM_CT_Area_Clip/CT_Area) *100 ) %>% 
+  filter(Percent_Area >= 50.0) 
+  
+quarter_mile_percent_ctrl_threshold_50 <- ctrl_census_tract_25 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = (SUM_CT_Area_Clip/CT_Area) *100 ) %>% 
+  filter(Percent_Area >= 50.0) 
+
+
+
+########################### 75% Threshold - TRT ##############################
+mile_percent_threshold_75 <- trt_census_tract_1 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = SUM_CT_Area_Clip/CT_Area *100 ) %>% 
+  filter(Percent_Area >= 75.0) 
+
+
+three_quarter_mile_percent_threshold_75 <- trt_census_tract_75 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = (SUM_CT_Area_Clip/CT_Area) *100 ) %>% 
+  filter(Percent_Area >= 75.0) 
+
+half_mile_percent_threshold_75 <- trt_census_tract_50 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = (SUM_CT_Area_Clip/CT_Area) *100 ) %>% 
+  filter(Percent_Area >= 75.0) 
+  
+
+quarter_mile_percent_threshold_75 <- trt_census_tract_25 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = (SUM_CT_Area_Clip/CT_Area) *100 ) %>% 
+  filter(Percent_Area >= 75.0) 
+  
+
+########################### 75% Threshold - CONTROL ########################## 
+mile_percent_ctrl_threshold_75 <- ctrl_census_tract_1 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = SUM_CT_Area_Clip/CT_Area *100 ) %>% 
+  filter(Percent_Area >= 75.0) 
+
+three_quarter_mile_percent_ctrl_threshold_75 <- ctrl_census_tract_75 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = (SUM_CT_Area_Clip/CT_Area) *100 ) %>% 
+  filter(Percent_Area >= 75.0) 
+
+
+half_mile_percent_ctrl_threshold_75 <- ctrl_census_tract_50 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = (SUM_CT_Area_Clip/CT_Area) *100 ) %>% 
+  filter(Percent_Area >= 75.0) 
+  
+quarter_mile_percent_ctrl_threshold_75 <- ctrl_census_tract_25 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = (SUM_CT_Area_Clip/CT_Area) *100 ) %>% 
+  filter(Percent_Area >= 75.0) 
+
+
+
+
+########################### 95% Threshold - TRT ##############################
+mile_percent_threshold_95 <- trt_census_tract_1 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = SUM_CT_Area_Clip/CT_Area *100 ) %>% 
+  filter(Percent_Area >= 95.0) 
+
+
+three_quarter_mile_percent_threshold_95 <- trt_census_tract_75 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = (SUM_CT_Area_Clip/CT_Area) *100 ) %>% 
+  filter(Percent_Area >= 95.0) 
+
+half_mile_percent_threshold_95 <- trt_census_tract_50 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = (SUM_CT_Area_Clip/CT_Area) *100 ) %>% 
+  filter(Percent_Area >= 95.0) 
+  
+
+quarter_mile_percent_threshold_95 <- trt_census_tract_25 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = (SUM_CT_Area_Clip/CT_Area) *100 ) %>% 
+  filter(Percent_Area >= 95.0) 
+  
+
+########################### 95% Threshold - CONTROL ########################## 
+mile_percent_ctrl_threshold_95 <- ctrl_census_tract_1 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = SUM_CT_Area_Clip/CT_Area *100 ) %>% 
+  filter(Percent_Area >= 95.0) 
+
+three_quarter_mile_percent_ctrl_threshold_95 <- ctrl_census_tract_75 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = (SUM_CT_Area_Clip/CT_Area) *100 ) %>% 
+  filter(Percent_Area >= 95.0) 
+
+
+half_mile_percent_ctrl_threshold_95 <- ctrl_census_tract_50 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = (SUM_CT_Area_Clip/CT_Area) *100 ) %>% 
+  filter(Percent_Area >= 95.0) 
+  
+quarter_mile_percent_ctrl_threshold_95 <- ctrl_census_tract_25 %>% 
+  left_join(census_tract_denominator, by = "GEOID") %>% 
+  mutate(Percent_Area = (SUM_CT_Area_Clip/CT_Area) *100 ) %>% 
+  filter(Percent_Area >= 95.0) 
+
+```
+
+
+**Construct Samples -- only relevant for including an actual control group ** 
+```{r}
+# census tracts may show up more than once --> once in trt group, once in control group
+# filter out these intersecting census tracts
+
+# # .25 Mile Buffer Zone Sample 
+quarter_mile_sample <- trt_census_tract_25 %>%
+  rbind(ctrl_census_tract_25) %>%
+  group_by(GEOID) %>%
+  filter(!(n() >1)) %>% # filter on v
+  ungroup()
+
+quarter_mile_sample %>% group_by(status) %>% summarize(count = n())
+
+#.50 Mile Buffer Zone Sample
+half_mile_sample <- trt_census_tract_50 %>%
+  rbind(ctrl_census_tract_50) %>%
+  group_by(GEOID) %>%
+  filter(!(n() >1)) %>%
+  ungroup()
+
+half_mile_sample %>% group_by(status) %>% summarize(count = n())
+
+# .75 Mile Buffer Zone Sample
+three_quarter_mile_sample <- trt_census_tract_75 %>%
+  rbind(ctrl_census_tract_75) %>%
+  group_by(GEOID) %>%
+  filter(!(n() >1)) %>%
+  ungroup()
+
+three_quarter_mile_sample %>% group_by(status) %>% summarize(count = n())
+
+# 1 Mile Buffer Zone Sample
+one_mile_sample <- trt_census_tract_1 %>%
+  rbind(ctrl_census_tract_1) %>%
+  group_by(GEOID) %>%
+  filter(!(n() >1)) %>%
+  ungroup()
+
+one_mile_sample %>% group_by(status) %>%
+  summarize(count = n())
+
+################################  SAMPLES at 50 % threshold  #######################
+# # .25 Mile Buffer Zone Sample 
+quarter_mile_sample_threshold_50 <- quarter_mile_percent_threshold_50 %>%
+  rbind(quarter_mile_percent_ctrl_threshold_50) %>%
+  group_by(GEOID) %>%
+  filter(!(n() >1)) %>% # filter on v
+  ungroup()
+
+quarter_mile_sample_threshold_50 %>% group_by(status) %>% summarize(count = n())
+
+#.50 Mile Buffer Zone Sample
+half_mile_sample_threshold_50 <- half_mile_percent_threshold_50 %>%
+  rbind(half_mile_percent_ctrl_threshold_50) %>%
+  group_by(GEOID) %>%
+  filter(!(n() >1)) %>%
+  ungroup()
+
+half_mile_sample_threshold_50 %>% group_by(status) %>% summarize(count = n())
+
+# .75 Mile Buffer Zone Sample
+three_quarter_mile_sample_threshold_50 <- three_quarter_mile_percent_threshold_50 %>%
+  rbind(three_quarter_mile_percent_ctrl_threshold_50) %>%
+  group_by(GEOID) %>%
+  filter(!(n() >1)) %>%
+  ungroup()
+
+three_quarter_mile_sample_threshold_50 %>% group_by(status) %>% summarize(count = n())
+
+# 1 Mile Buffer Zone Sample
+one_mile_sample_threshold_50 <- mile_percent_threshold_50 %>%
+  rbind(mile_percent_ctrl_threshold_50) %>%
+  group_by(GEOID) %>%
+  filter(!(n() >1)) %>%
+  ungroup()
+
+one_mile_sample_threshold_50 %>% group_by(status) %>%
+  summarize(count = n())
+
+################################  SAMPLES at 75 % threshold  #######################
+# # .25 Mile Buffer Zone Sample 
+quarter_mile_sample_threshold_75 <- quarter_mile_percent_threshold_75 %>%
+  rbind(quarter_mile_percent_ctrl_threshold_75) %>%
+  group_by(GEOID) %>%
+  filter(!(n() >1)) %>% # filter on v
+  ungroup()
+
+quarter_mile_sample_threshold_75 %>% group_by(status) %>% summarize(count = n())
+
+#.50 Mile Buffer Zone Sample
+half_mile_sample_threshold_75 <- half_mile_percent_threshold_75 %>%
+  rbind(half_mile_percent_ctrl_threshold_75) %>%
+  group_by(GEOID) %>%
+  filter(!(n() >1)) %>%
+  ungroup()
+
+half_mile_sample_threshold_75 %>% group_by(status) %>% summarize(count = n())
+
+# .75 Mile Buffer Zone Sample
+three_quarter_mile_sample_threshold_75 <- three_quarter_mile_percent_threshold_75 %>%
+  rbind(three_quarter_mile_percent_ctrl_threshold_75) %>%
+  group_by(GEOID) %>%
+  filter(!(n() >1)) %>%
+  ungroup()
+
+three_quarter_mile_sample_threshold_75 %>% group_by(status) %>% summarize(count = n())
+
+# 1 Mile Buffer Zone Sample
+one_mile_sample_threshold_75 <- mile_percent_threshold_75 %>%
+  rbind(mile_percent_ctrl_threshold_75) %>%
+  group_by(GEOID) %>%
+  filter(!(n() >1)) %>%
+  ungroup()
+
+one_mile_sample_threshold_75 %>% group_by(status) %>%
+  summarize(count = n())
+
+
+
+################################  SAMPLES at 95 % threshold  #######################
+# # .25 Mile Buffer Zone Sample 
+quarter_mile_sample_threshold_95 <- quarter_mile_percent_threshold_95 %>%
+  rbind(quarter_mile_percent_ctrl_threshold_95) %>%
+  group_by(GEOID) %>%
+  filter(!(n() >1)) %>% # filter on v
+  ungroup()
+
+quarter_mile_sample_threshold_95 %>% group_by(status) %>% summarize(count = n())
+
+#.50 Mile Buffer Zone Sample
+half_mile_sample_threshold_95 <- half_mile_percent_threshold_95 %>%
+  rbind(half_mile_percent_ctrl_threshold_95) %>%
+  group_by(GEOID) %>%
+  filter(!(n() >1)) %>%
+  ungroup()
+
+half_mile_sample_threshold_95 %>% group_by(status) %>% summarize(count = n())
+
+# .75 Mile Buffer Zone Sample
+three_quarter_mile_sample_threshold_95 <- three_quarter_mile_percent_threshold_95 %>%
+  rbind(three_quarter_mile_percent_ctrl_threshold_95) %>%
+  group_by(GEOID) %>%
+  filter(!(n() >1)) %>%
+  ungroup()
+
+three_quarter_mile_sample_threshold_95 %>% group_by(status) %>% summarize(count = n())
+
+# 1 Mile Buffer Zone Sample
+one_mile_sample_threshold_95 <- mile_percent_threshold_95 %>%
+  rbind(mile_percent_ctrl_threshold_95) %>%
+  group_by(GEOID) %>%
+  filter(!(n() >1)) %>%
+  ungroup()
+
+one_mile_sample_threshold_95 %>% group_by(status) %>%
+  summarize(count = n())
+
+
+
+```
+
+
+```{r}
+# SAMPLES 
+census_tracts_threshold_50 <- quarter_mile_sample_threshold_50 %>% 
+  rbind(half_mile_sample_threshold_50) %>% 
+  rbind(three_quarter_mile_sample_threshold_50) %>% 
+  rbind(one_mile_sample_threshold_50) %>% 
+  mutate(area_threshold_flag = "50 percent")
+
+
+census_tracts_threshold_75 <- quarter_mile_sample_threshold_75 %>% 
+  rbind(half_mile_sample_threshold_75) %>% 
+  rbind(three_quarter_mile_sample_threshold_75) %>% 
+  rbind(one_mile_sample_threshold_75) %>% 
+  mutate(area_threshold_flag = "75 percent")
+  
+
+census_tracts_threshold_95 <- quarter_mile_sample_threshold_95 %>% 
+  rbind(half_mile_sample_threshold_95) %>% 
+  rbind(three_quarter_mile_sample_threshold_95) %>% 
+  rbind(one_mile_sample_threshold_95) %>% 
+  mutate(area_threshold_flag = "95 percent")
+
+
+
+
+census_tracts <- census_tracts_threshold_50 %>% 
+  rbind(census_tracts_threshold_75) %>% 
+  rbind(census_tracts_threshold_95)
+
+write_csv(census_tracts, str_glue("{dir_2}/census_tracts.csv")) 
+```
+
+
+
+

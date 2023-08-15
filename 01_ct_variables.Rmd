@@ -1,0 +1,265 @@
+---
+title: "Census Tract Variables"
+author: "Nikki Miller"
+date: "2022-12-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse) 
+library(tidycensus)
+library(sf)
+library(tigris) 
+options(tigris_use_cache = TRUE)
+
+dir_p <- "/Users/eliza/Documents/Data/Capstone/ACS Data"# change to personal dir 
+out <-"/Users/eliza/Documents/Data/Capstone/ACS Data/Out"
+```
+
+# Get ACS Data Functions
+```{r}
+# # Load Variables: estimates from 2006-2009 to browse  
+# variables_2009 <- load_variables(2009, "acs5")
+# variables_2010 <- load_variables(2010, "acs5")
+# variables_2011 <- load_variables(2011, "acs5")
+# variables_2012 <- load_variables(2012, "acs5")
+# variables_2012 <- load_variables(2012, "acs5")
+
+
+# Function to get  the data from 2012 - 2019, Function 1 modify for 2009 - 2012 
+ct_variables <- function(x){
+ct_vars <- get_acs(geography = "tract",
+                   state = "NY",
+                   county = c("New York", "Bronx", 
+                              "Kings", "Queens"),
+                        year = x,
+                        survey = "acs5",
+                        variables = c(median_hh_income = "B19013_001", 
+                                      ## Race 
+                                      race_total = "B03002_001",
+                                      race_not_hispanic = "B03002_002", 
+                                      race_white = "B03002_003",
+                                      race_black = "B03002_004",
+                                      race_asian = "B03002_006",
+                                      race_aapi = "B03002_007",
+                                      race_other = "B03002_008",
+                                      ## Marital Status 
+                                      marital_status_total = "B06008_001", 
+                                      never_married = "B06008_002", 
+                                      divorced = "B06008_004", 
+                                      widowed = "B06008_006", 
+                                      ## Poverty 
+                                      poverty_total = "B17001_001", 
+                                      income_below_poverty =  "B17001_002", 
+                                      # # Education - for 2009 - 2011
+                                      # education_total_male = "B15002_001",
+                                      # some_college_1_male = "B15002_012",
+                                      # some_college_2_male = "B15002_013",
+                                      # associates_degree_male = "B15002_014",
+                                      # bachelors_degree_male = "B15002_015",
+                                      # masters_degree_male = "B15002_016",
+                                      # education_total_female = "B15002_019",
+                                      # some_college_1_female = "B15002_029",
+                                      # some_college_2_female = "B15002_030",
+                                      # associates_degree_female = "B15002_031",
+                                      # bachelors_degree_female = "B15002_032",
+                                      # masters_degree_female = "B15002_033",
+                                      
+                                      # # Education - for 2012 - 2019
+                                      education_total = "B15003_001",
+                                      some_college_1 = "B15003_019",
+                                      some_college_2 = "B15003_020",
+                                      associates_degree = "B15003_021",
+                                      bachelors_degree = "B15003_022",
+                                      masters_degree = "B15003_023",
+                                      
+                                      # # Employment - Does not work for 2009 - 2010, OMIT
+                                      # labor_force = "B23025_003",
+                                      # employed = "B23025_004",
+                                      # unemployed = "B23025_005",
+                                      ## Gender 
+                                      gender_total = "B01001_001",
+                                      male = "B01001_002",
+                                      female = "B01001_026",
+                                      transpo_total = "B08301_001", 
+                                      transpo_car = "B08301_002", 
+                                      transpo_public = "B08301_010", 
+                                      transpo_public_bus = "B08301_011", 
+                                      transpo_public_subway = "B08301_013", 
+                                      transpo_public_railroad = "B08301_014", 
+                                      transpo_public_ferry = "B08301_015", 
+                                      transpo_taxi = "B08301_016",
+                                      transpo_motorcycle = "B08301_017", 
+                                      transpo_bike = "B08301_018", 
+                                      transpo_walk = "B08301_019",
+                                      transpo_other = "B08301_020", 
+                                      travel_time_total = "B08303_001", 
+                                      travel_time_1 = "B08303_008", 
+                                      travel_time_2 = "B08303_009", 
+                                      travel_time_3 = "B08303_010", 
+                                      travel_time_4 = "B08303_011", 
+                                      travel_time_5 = "B08303_012", 
+                                      travel_time_6 = "B08303_013", 
+                                      ## Tenure 
+                                      tenure_total  = "B25003_001", 
+                                      owner_occupied = "B25003_002", 
+                                      renter_occupied = "B25003_003"),
+                   output = "wide") 
+                        return(ct_vars) 
+}
+```
+
+
+# Join with sample Census Tracts 
+```{r}
+# change to full sample where n = 120 
+census_tracts <- read_csv(str_glue("{dir_p}/census_tracts.csv")) %>% 
+  mutate(GEOID = as.character(GEOID)) 
+
+# tracts to filter down to 
+selected_tracts <- census_tracts$GEOID
+
+```
+
+# Pull 
+
+```{r}
+
+# Function 2 modify for 2010 - 2011 
+ct_year <-function(x){
+  ct <- ct_variables(x) %>%
+  select(-ends_with("M")) %>% 
+  filter(GEOID %in% selected_tracts) %>% 
+  mutate(Year = x) 
+  return(ct)
+}
+
+ct_group <- function(...){
+  group <- census_tracts %>% 
+  left_join(..., by = "GEOID")
+  
+  return(group) 
+}
+
+
+# # 2010 data 
+ct_2010 <- ct_year(2010) 
+ct_2010_group <- ct_group(ct_2010) %>% 
+  mutate(education_totalE = education_total_maleE + education_total_femaleE, 
+         somecollege = some_college_1_maleE + some_college_2_maleE + associates_degree_maleE + some_college_1_femaleE +
+           some_college_2_femaleE + associates_degree_femaleE, 
+         bachelors_degreeE = bachelors_degree_maleE + bachelors_degree_femaleE ,  
+         masters_degreeE = masters_degree_maleE + masters_degree_femaleE) %>% 
+  select(-c(education_total_maleE, education_total_femaleE, some_college_1_maleE, 
+            some_college_2_maleE, associates_degree_maleE, some_college_1_femaleE,
+            some_college_2_femaleE, associates_degree_femaleE, bachelors_degree_maleE, 
+            bachelors_degree_femaleE, masters_degree_maleE, masters_degree_femaleE)) 
+  
+
+# # 2011 data 
+ct_2011 <- ct_year(2011) 
+ct_2011_group <- ct_group(ct_2011) %>% 
+  mutate(education_totalE = education_total_maleE + education_total_femaleE, 
+         somecollege = some_college_1_maleE + some_college_2_maleE + associates_degree_maleE + some_college_1_femaleE +
+           some_college_2_femaleE + associates_degree_femaleE, 
+         bachelors_degreeE = bachelors_degree_maleE + bachelors_degree_femaleE ,  
+         masters_degreeE = masters_degree_maleE + masters_degree_femaleE) %>% 
+  select(-c(education_total_maleE, education_total_femaleE, some_college_1_maleE, 
+            some_college_2_maleE, associates_degree_maleE, some_college_1_femaleE,
+            some_college_2_femaleE, associates_degree_femaleE, bachelors_degree_maleE, 
+            bachelors_degree_femaleE, masters_degree_maleE, masters_degree_femaleE)) 
+
+
+# write_csv(ct_2010_group, str_glue("{out}/ct_2010.csv"))
+# write_csv(ct_2011_group, str_glue("{out}/ct_2011.csv"))
+
+
+## APPLY CHANGES TO FUNCTION 1 AND 2 ABOVE 
+
+# Function 2 modify for 2012-2019 
+ct_year <-function(x){
+  ct <- ct_variables(x) %>%
+  select(-ends_with("M")) %>% 
+  filter(GEOID %in% selected_tracts) %>% 
+  mutate(Year = x, # combine the some college variables and associate degree variable
+         somecollege = some_college_1E + some_college_2E + associates_degreeE) %>% # for 2012 - 2019 only
+    select(-c(some_college_1E, some_college_2E, associates_degreeE)) # for 2012 - 2019 only
+
+  return(ct)
+}
+
+# 2012 data 
+ct_2012 <- ct_year(2012)
+ct_2012_group <- ct_group(ct_2012)
+# write_csv(ct_2012_group, str_glue("{out}/ct_2012.csv"))
+
+
+# 2013 data 
+ct_2013 <- ct_year(2013)
+ct_2013_group <- ct_group(ct_2013)
+# write_csv(ct_2013_group, str_glue("{out}/ct_2013.csv"))
+
+# 2014 data 
+ct_2014 <- ct_year(2014)
+ct_2014_group <- ct_group(ct_2014)
+# write_csv(ct_2014_group, str_glue("{out}/ct_2014.csv"))
+
+# 2015 data 
+ct_2015 <- ct_year(2015)
+ct_2015_group <- ct_group(ct_2015)
+# write_csv(ct_2015_group, str_glue("{out}/ct_2015.csv"))
+
+# 2016 data 
+ct_2016 <- ct_year(2016)
+ct_2016_group <- ct_group(ct_2016)
+# write_csv(ct_2016_group, str_glue("{out}/ct_2016.csv"))
+
+# # 2017 data 
+ct_2017 <- ct_year(2017)
+ct_2017_group <- ct_group(ct_2017)
+# write_csv(ct_2017_group, str_glue("{out}/ct_2017.csv"))
+
+# 2018 data 
+ct_2018 <- ct_year(2018)
+ct_2018_group <- ct_group(ct_2018)
+# write_csv(ct_2018_group, str_glue("{out}/ct_2018.csv"))
+
+# 2019 data 
+ct_2019 <- ct_year(2019)
+ct_2019_group <- ct_group(ct_2019)
+# write_csv(ct_2019_group, str_glue("{out}/ct_2019.csv"))
+```
+
+# Combine data 2012 - 2009 
+```{r}
+
+combine <- ct_2010_group %>% 
+  bind_rows(ct_2011_group) %>% 
+  bind_rows(ct_2012_group) %>% 
+  bind_rows(ct_2013_group) %>% 
+  bind_rows(ct_2014_group) %>% 
+  bind_rows(ct_2015_group) %>% 
+  bind_rows(ct_2016_group) %>% 
+  bind_rows(ct_2017_group) %>% 
+  bind_rows(ct_2018_group) %>%  
+  bind_rows(ct_2019_group) 
+
+combine_clean <- combine %>% 
+  rename("CT_Area_Clip" = "SUM_CT_Area_Clip", 
+         "Status" = "status", 
+         "Name" = "NAME.x") %>% 
+  select(c("GEOID", "Year", "Status", "Name", "CT_Area", "SymbolID", "CT_Area_Clip", "Percent_Area", "area_threshold_flag"), everything()) %>% 
+  select (-c("NAME.y"))
+
+
+
+
+write_csv(combine_clean, str_glue("{out}/combined_data_4_26.csv")) 
+
+```
+
+
+
+
